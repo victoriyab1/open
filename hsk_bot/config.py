@@ -1,6 +1,7 @@
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -28,7 +29,14 @@ class Config:
 
     @classmethod
     def from_env(cls):
-        load_dotenv()
+        env_file = os.environ.get("BOT_ENV_FILE", "").strip()
+        if env_file:
+            if not Path(env_file).is_file():
+                raise ValueError("The secret file configured in BOT_ENV_FILE is missing. "
+                                 "Check its filename in Render > Environment > Secret Files.")
+            load_dotenv(dotenv_path=env_file, interpolate=False)
+        else:
+            load_dotenv()
         required = ("BOT_TOKEN", "OWNER_TELEGRAM_ID", "DATABASE_URL", "WEBHOOK_SECRET", "CRON_SECRET")
         values = {key: env_value(key) for key in required}
         missing = [key for key, value in values.items() if not value]
