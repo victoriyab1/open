@@ -1,0 +1,10 @@
+{
+  "source_url": "https://hsk.cn-bj.ufileos.com/3.0/%E6%96%B0%E7%89%88HSK%E8%80%83%E8%AF%95%E5%A4%A7%E7%BA%B21219.pdf",
+  "source_sha256": "d8b6646599bc9a0c9616a4cb06d4b37461f8792f70a3171016d00fcd8eda09ad",
+  "syllabus_publication": "2025-11",
+  "syllabus_effective": "2026-07",
+  "level": 1,
+  "word_count": 300,
+  "content": "Original Russian/English translations and beginner examples",
+  "example_pinyin": "Official word readings, dictionary tone spelling; pypinyin 0.55.0 for extra characters"
+}
