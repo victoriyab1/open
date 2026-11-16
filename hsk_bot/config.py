@@ -6,6 +6,17 @@ from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
 
 
+def env_value(name, default=""):
+    """Accept a value pasted alone or as one dotenv assignment, without logging it."""
+    value = os.environ.get(name, default).strip()
+    for _ in range(2):
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1].strip()
+        if value.startswith(name + "="):
+            value = value[len(name) + 1:].strip()
+    return value
+
+
 @dataclass(frozen=True)
 class Config:
     token: str
@@ -18,13 +29,20 @@ class Config:
     @classmethod
     def from_env(cls):
         load_dotenv()
-        token = os.environ.get("BOT_TOKEN", "").strip()
-        owner = os.environ.get("OWNER_TELEGRAM_ID", "")
-        webhook = os.environ.get("WEBHOOK_SECRET", "")
-        cron = os.environ.get("CRON_SECRET", "")
-        database = os.environ.get("DATABASE_URL", "")
+        required = ("BOT_TOKEN", "OWNER_TELEGRAM_ID", "DATABASE_URL", "WEBHOOK_SECRET", "CRON_SECRET")
+        values = {key: env_value(key) for key in required}
+        missing = [key for key, value in values.items() if not value]
+        if missing:
+            raise ValueError("Missing environment variables: " + ", ".join(missing)
+                             + ". In Render open Environment > Add from .env, then Save, rebuild, and deploy.")
+        token = values["BOT_TOKEN"]
+        owner = values["OWNER_TELEGRAM_ID"]
+        webhook = values["WEBHOOK_SECRET"]
+        cron = values["CRON_SECRET"]
+        database = values["DATABASE_URL"]
         if not re.fullmatch(r"\d+:[A-Za-z0-9_-]+", token):
-            raise ValueError("BOT_TOKEN is missing or invalid")
+            raise ValueError("BOT_TOKEN has invalid format. Set BOT_TOKEN to the token from BotFather; "
+                             "do not paste an API URL or multiple .env lines into its value.")
         if not owner.isdecimal() or int(owner) <= 0:
             raise ValueError("Set OWNER_TELEGRAM_ID to your positive numeric Telegram ID")
         if any(not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", s) for s in (webhook, cron)):
@@ -35,6 +53,6 @@ class Config:
             raise ValueError("Set DATABASE_URL to a PostgreSQL or local SQLite URL")
         if os.environ.get("RENDER") and database.startswith("sqlite:"):
             raise ValueError("Render requires persistent PostgreSQL (Neon), not SQLite")
-        timezone = os.environ.get("DEFAULT_TIMEZONE", "Europe/Moscow")
+        timezone = env_value("DEFAULT_TIMEZONE", "Europe/Moscow")
         ZoneInfo(timezone)
         return cls(token, int(owner), database, webhook, cron, timezone)
