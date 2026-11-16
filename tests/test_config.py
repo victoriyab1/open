@@ -32,3 +32,28 @@ def test_render_rejects_ephemeral_sqlite(monkeypatch):
 def test_valid_local_config(monkeypatch):
     env(monkeypatch)
     assert Config.from_env().owner_id == 123456
+
+
+@pytest.mark.parametrize("wrapper", ['"{}"', "'{}'", 'BOT_TOKEN="{}"'])
+def test_token_copied_with_dotenv_quotes_or_assignment(monkeypatch, wrapper):
+    env(monkeypatch)
+    monkeypatch.setenv("BOT_TOKEN", wrapper.format("123:offline-test"))
+    assert Config.from_env().token == "123:offline-test"
+
+
+def test_missing_fields_are_reported_together_without_values(monkeypatch):
+    env(monkeypatch)
+    monkeypatch.delenv("BOT_TOKEN")
+    monkeypatch.delenv("CRON_SECRET")
+    with pytest.raises(ValueError) as error:
+        Config.from_env()
+    assert "Missing environment variables: BOT_TOKEN, CRON_SECRET" in str(error.value)
+    assert "w" * 32 not in str(error.value)
+
+
+def test_full_export_pasted_into_single_value_is_rejected(monkeypatch):
+    env(monkeypatch)
+    monkeypatch.setenv("BOT_TOKEN", "BOT_TOKEN=123:offline-test\nDATABASE_URL=secret")
+    with pytest.raises(ValueError, match="BOT_TOKEN has invalid format") as error:
+        Config.from_env()
+    assert "123:offline-test" not in str(error.value)
