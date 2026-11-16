@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.sqlite*
+*.log
+data/syllabus-source.pdf
+data/syllabus-source.txt
+data/audio/
+dist/
+.deploy-state.json
