@@ -300,7 +300,7 @@ class Engine:
         for wid in day["new"]:
             w = self.by_id[wid]
             texts.append(f"{w['hanzi']} · {w['pinyin']}\n{w[user['lang']]}\n"
-                         f"例：{w['example']}\n{w['example_pinyin']}\n{w['example_' + user['lang']]}")
+                         f"{tr(user, 'example_label')}: {w['example']}\n{w['example_pinyin']}\n{w['example_' + user['lang']]}")
             rows.append([button("🔊 " + w["hanzi"], f"audio:{wid}")])
         # Expire morning/new-card deliveries at the end of their local calendar day.
         end = datetime.combine(date.fromisoformat(today) + timedelta(days=1), datetime.min.time(),
