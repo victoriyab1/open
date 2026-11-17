@@ -7,14 +7,17 @@ from hsk_bot.telegram import Telegram, TelegramError
 class RecordingTelegram(Telegram):
     def __init__(self):
         self.calls = []
+        self.uploads = []
         self.invalid_cached_file = False
 
     def call(self, method, payload=None, files=None):
-        self.calls.append((method, payload, bool(files)))
-        if self.invalid_cached_file and method == "sendAudio" and not files:
+        self.calls.append((method, dict(payload or {}), bool(files)))
+        if files:
+            self.uploads.append({key: (value[0], value[2]) for key, value in files.items()})
+        if self.invalid_cached_file and method == "sendDocument" and not files:
             self.invalid_cached_file = False
             raise TelegramError(400)
-        return {"audio": {"file_id": "cached-telegram-file"}}
+        return {"document": {"file_id": "cached-document-file"}}
 
 
 @pytest.fixture
@@ -35,22 +38,44 @@ def test_audio_upload_and_persistent_telegram_cache(audio):
     api = RecordingTelegram()
     state = {}
     api.execute(audio, state)
-    assert api.calls[0][0] == "sendAudio"
+    assert api.calls[0][0] == "sendDocument"
     assert api.calls[0][2]  # Uploaded file first time.
-    assert state["audio_files"]["147"] == "cached-telegram-file"
+    assert api.calls[0][1]["disable_content_type_detection"] == "true"
+    assert api.uploads == [{"document": ("word-147.mp3", "application/octet-stream")}]
+    assert state["pronunciation_documents"]["147"] == "cached-document-file"
     api.execute(audio, state)
     assert not api.calls[-1][2]  # Reuse Telegram file_id, don't regenerate audio.
-    assert api.calls[-1][1]["audio"] == "cached-telegram-file"
+    assert api.calls[-1][1]["document"] == "cached-document-file"
 
 
 def test_expired_audio_file_id_regenerates(audio):
     api = RecordingTelegram()
     api.invalid_cached_file = True
-    state = {"audio_files": {"147": "expired"}}
+    state = {"pronunciation_documents": {"147": "expired"}}
     api.execute(audio, state)
     assert len(api.calls) == 2
     assert api.calls[-1][2]
-    assert state["audio_files"]["147"] == "cached-telegram-file"
+    assert "document" not in api.calls[-1][1]  # Do not send an expired ID alongside the upload.
+    assert state["pronunciation_documents"]["147"] == "cached-document-file"
+
+
+def test_legacy_music_cache_is_not_reused_for_pronunciation(audio):
+    api = RecordingTelegram()
+    state = {"audio_files": {"147": "legacy-music-file", "146": "another-music-file"}}
+    api.execute(audio, state)
+    assert len(api.calls) == 1
+    assert api.calls[0][0] == "sendDocument"
+    assert api.calls[0][2]
+    assert "audio" not in api.calls[0][1]
+    assert state["pronunciation_documents"]["147"] == "cached-document-file"
+
+
+def test_click_sends_only_the_selected_word(audio):
+    api = RecordingTelegram()
+    state = {"pronunciation_documents": {"147": "selected-word", "146": "other-word", "221": "third-word"}}
+    api.execute(audio, state)
+    assert api.calls == [("sendDocument", {"chat_id": 123456, "caption": "你好 · nǐ hǎo",
+                                          "document": "selected-word"}, False)]
 
 
 def test_speech_service_failure_gives_text_fallback(audio, monkeypatch):
