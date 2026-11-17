@@ -38,17 +38,20 @@ class Telegram:
         method, payload = effect["method"], effect["payload"]
         if method == "audio":
             wid = str(payload["word_id"])
-            cache = state.setdefault("audio_files", {})
-            audio = cache.get(wid)
+            # Documents do not enter Telegram's music playlist. Keep their file
+            # IDs separate: a legacy sendAudio ID would preserve the music type.
+            cache = state.setdefault("pronunciation_documents", {})
+            document = cache.get(wid)
             args = {"chat_id": payload["chat_id"], "caption": payload["caption"]}
-            if audio:
-                args["audio"] = audio
+            if document:
+                args["document"] = document
                 try:
-                    return self.call("sendAudio", args)
+                    return self.call("sendDocument", args)
                 except TelegramError as error:
                     if error.code != 400:
                         raise
                     cache.pop(wid, None)
+                    args.pop("document", None)
             # Cache only public Chinese word recordings on disk; no user data.
             folder = Path(tempfile.gettempdir()) / "hsk-word-audio"
             folder.mkdir(exist_ok=True)
@@ -59,8 +62,12 @@ class Telegram:
                     gTTS(payload["text"], lang="zh-CN", timeout=(5, 10)).write_to_fp(stream)
                     path.write_bytes(stream.getvalue())
                 with path.open("rb") as stream:
-                    result = self.call("sendAudio", args, files={"audio": (f"word-{wid}.mp3", stream, "audio/mpeg")})
-                cache[wid] = result["audio"]["file_id"]
+                    # Multipart form booleans are strings; force a generic file
+                    # instead of letting Telegram detect a music attachment.
+                    upload_args = {**args, "disable_content_type_detection": "true"}
+                    result = self.call("sendDocument", upload_args,
+                                       files={"document": (f"word-{wid}.mp3", stream, "application/octet-stream")})
+                cache[wid] = result["document"]["file_id"]
                 return result
             except TelegramError as error:
                 if error.code != 400:
