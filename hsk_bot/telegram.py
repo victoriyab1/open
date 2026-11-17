@@ -34,24 +34,43 @@ class Telegram:
                                 body.get("parameters", {}).get("retry_after", 30))
         return body["result"]
 
+    def send_pronunciation_voice(self, state, payload, files=None):
+        """Keep one bot-created voice player instead of building a media queue."""
+        previous = state.get("pronunciation_message")
+        if previous and previous["chat_id"] == payload["chat_id"]:
+            try:
+                self.call("deleteMessage", {"chat_id": previous["chat_id"],
+                                            "message_id": previous["message_id"]})
+            except TelegramError as error:
+                if error.code != 400:
+                    raise
+                # Already removed or older than Telegram's deletion window.
+                log.info("Previous pronunciation message is no longer removable")
+            state.pop("pronunciation_message", None)
+        result = self.call("sendVoice", payload, files=files)
+        if "voice" in result:
+            state["pronunciation_message"] = {"chat_id": payload["chat_id"],
+                                                "message_id": result["message_id"]}
+        return result
+
     def execute(self, effect, state):
         method, payload = effect["method"], effect["payload"]
         if method == "audio":
             wid = str(payload["word_id"])
-            # Documents do not enter Telegram's music playlist. Keep their file
-            # IDs separate: a legacy sendAudio ID would preserve the music type.
-            cache = state.setdefault("pronunciation_documents", {})
-            document = cache.get(wid)
+            # Voice messages play inside the chat. Never reuse music/document
+            # IDs: Telegram preserves the original attachment's media type.
+            cache = state.setdefault("pronunciation_voices", {})
+            voice = cache.get(wid)
             args = {"chat_id": payload["chat_id"], "caption": payload["caption"]}
-            if document:
-                args["document"] = document
+            if voice:
+                args["voice"] = voice
                 try:
-                    return self.call("sendDocument", args)
+                    return self.send_pronunciation_voice(state, args)
                 except TelegramError as error:
                     if error.code != 400:
                         raise
                     cache.pop(wid, None)
-                    args.pop("document", None)
+                    args.pop("voice", None)
             # Cache only public Chinese word recordings on disk; no user data.
             folder = Path(tempfile.gettempdir()) / "hsk-word-audio"
             folder.mkdir(exist_ok=True)
@@ -62,12 +81,9 @@ class Telegram:
                     gTTS(payload["text"], lang="zh-CN", timeout=(5, 10)).write_to_fp(stream)
                     path.write_bytes(stream.getvalue())
                 with path.open("rb") as stream:
-                    # Multipart form booleans are strings; force a generic file
-                    # instead of letting Telegram detect a music attachment.
-                    upload_args = {**args, "disable_content_type_detection": "true"}
-                    result = self.call("sendDocument", upload_args,
-                                       files={"document": (f"word-{wid}.mp3", stream, "application/octet-stream")})
-                cache[wid] = result["document"]["file_id"]
+                    result = self.send_pronunciation_voice(
+                        state, args, files={"voice": (f"word-{wid}.mp3", stream, "audio/mpeg")})
+                cache[wid] = result["voice"]["file_id"]
                 return result
             except TelegramError as error:
                 if error.code != 400:

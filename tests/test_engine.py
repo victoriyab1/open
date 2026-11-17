@@ -253,12 +253,14 @@ def test_old_daily_buttons_cannot_start_old_lesson(bot):
 
 def test_delete_requires_confirmation_and_clears_progress(bot):
     user = complete_first_day(bot)
+    bot[1]["pronunciation_message"] = {"chat_id": OWNER, "message_id": 99}
     bot[2]("/delete_me")
     bot[2](callback="delete:wrong")
     assert bot[1]["user"] is user
     nonce = user["delete_nonce"]
     bot[2](callback="delete:" + nonce)
     assert bot[1]["user"] is None
+    assert "pronunciation_message" not in bot[1]
     assert len(bot[1]["outbox"]) == 1
     assert not bot[0].tick(bot[1], NOW + timedelta(days=1))
 

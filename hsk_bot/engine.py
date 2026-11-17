@@ -243,6 +243,7 @@ class Engine:
                 state["outbox"] = []
                 self.send(state, user, tr(user, "deleted"))
                 state["user"] = None
+                state.pop("pronunciation_message", None)
                 state["processed"] = [state["processed"][-1]]
 
     def lookup_seen(self, user, value):
